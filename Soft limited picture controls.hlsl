@@ -24,7 +24,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 // THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Soft limited picture controls - version 2016-01-21 - (requires ps >= 3.0)
+// Soft limited picture controls - version 2016-01-23 - (requires ps >= 3.0)
 // EXPECTS FULL RANGE GAMMA LIGHT
 
 sampler s0 : register(s0);
@@ -53,13 +53,9 @@ float4 main(float2 tex : TEXCOORD0) : COLOR {
 
 	float luma = CtL(orig);
 
-	float3 saturated = float3( luma + (orig.r - luma)*saturation,
-	                           luma + (orig.g - luma)*saturation,
-	                           luma + (orig.b - luma)*saturation );
+	float3 res = ((luma + (orig - luma)*saturation) + brightness)*contrast;
 
-	float3 res = (saturated + brightness)*contrast;
-
-	float3 res_diff = res-orig;
+	float3 res_diff = res - orig;
 
 	res_diff.r =  (soft_lim(max(res_diff.r, 0), maxcolor_diff.r))
 	             -(soft_lim(min(res_diff.r, 0), mincolor_diff.r));
@@ -70,5 +66,5 @@ float4 main(float2 tex : TEXCOORD0) : COLOR {
 	res_diff.b =  (soft_lim(max(res_diff.b, 0), maxcolor_diff.b))
 	             -(soft_lim(min(res_diff.b, 0), mincolor_diff.b));
 
-	return float4(orig+res_diff, 1.0);
+	return float4(orig + res_diff, 1.0);
 }
