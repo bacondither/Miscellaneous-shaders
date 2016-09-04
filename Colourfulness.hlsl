@@ -24,27 +24,29 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 // THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Colourfulness - version 2016-05-06 - (requires ps >= ps_2_b)
+// Colourfulness - version 2016-09-04 - (requires ps >= ps_2_b)
 // EXPECTS FULL RANGE GAMMA LIGHT
 
 sampler s0 : register(s0);
 float2 p1  : register(c1);
 
-//--------------------------------------- Settings ---------------------------------------------
+//--------------------------------- Settings ------------------------------------------------
 
-#define colourfulness  0.4                // Degree of colourfulness, 0 = neutral [>-1-<2]
-#define lim_luma       0.8                // Lower vals allow more change near clipping [0.5-1]
+#define colourfulness  0.4          // Degree of colourfulness, 0 = neutral [-1.0<->3.0]
+#define lim_luma       0.7          // Lower vals allow more change near clipping [0.1<->1.0]
 
-#define alpha_out      1.0                // MPDN requires alpha channel output to be 1.0
+#define alpha_out      1.0          // MPDN requires alpha channel output to be 1.0
 
-//----------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------
 
 // Soft limit, modified tanh approximation
 #define soft_lim(v,s)  ( clamp((v/s)*(27 + pow(v/s, 2))/(27 + 9*pow(v/s, 2)), -1, 1)*s )
 
-// Max/min rgb components
+// Weighted power mean, p=0.5
+#define wpmean(a,b,c)  ( pow((c*sqrt(abs(a)) + (1-c)*sqrt(abs(b))), 2) )
+
+// Min rgb components
 #define max3(RGB)      ( max((RGB).r, max((RGB).g, (RGB).b)) )
-#define min3(RGB)      ( min((RGB).r, min((RGB).g, (RGB).b)) )
 
 // sRGB gamma approximation
 #define to_linear(G)   ( pow((G) + 0.06, 2.4) )
@@ -64,8 +66,8 @@ float4 main(float2 tex : TEXCOORD0) : COLOR
 
 	if (colourfulness > 0.0)
 	{
-		// 125% of colour clamped to max range + overshoot
-		float3 ccldiff = clamp(colour*1.25, -0.001, 1.001) - c0;
+		// 120% of colour clamped to max range + overshoot
+		float3 ccldiff = clamp((diff*1.2) + c0, -0.001, 1.001) - c0;
 
 		// Calculate maximum saturation increase without altering ratios for RGB
 		float3 diff_luma = c0 - luma;
@@ -73,12 +75,12 @@ float4 main(float2 tex : TEXCOORD0) : COLOR
 		float poslim = (1.001 - luma)/max3(max(diff_luma, 0));
 		float neglim = (luma + 0.001)/max3(abs(min(diff_luma, 0)));
 
-		float finallim = clamp(min(poslim, neglim), 1, 1e4);
+		float diffmul = min(min(abs(poslim), abs(neglim)), 32);
 
-		float3 diffmax = (luma + diff_luma*finallim) - c0;
+		float3 diffmax = (luma + diff_luma*diffmul) - c0;
 
 		// Soft limit diff
-		diff = soft_lim( diff, lerp(abs(ccldiff), abs(diffmax), saturate(lim_luma)) );
+		diff = soft_lim( diff, wpmean(diffmax, ccldiff, lim_luma) );
 	}
 
 	return float4( c0 + diff, alpha_out );
