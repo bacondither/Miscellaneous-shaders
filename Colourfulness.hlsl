@@ -32,7 +32,7 @@ float2 p1  : register(c1);
 
 //--------------------------------- Settings ------------------------------------------------
 
-#define colourfulness  0.4          // Degree of colourfulness, 0 = neutral [-1.0<->3.0]
+#define colourfulness  0.4          // Degree of colourfulness, 0 = neutral [-1.0<->2.0]
 #define lim_luma       0.7          // Lower vals allow more change near clipping [0.1<->1.0]
 
 #define alpha_out      1.0          // MPDN requires alpha channel output to be 1.0
@@ -67,13 +67,13 @@ float4 main(float2 tex : TEXCOORD0) : COLOR
 	if (colourfulness > 0.0)
 	{
 		// 120% of colour clamped to max range + overshoot
-		float3 ccldiff = clamp((diff*1.2) + c0, -0.001, 1.001) - c0;
+		float3 ccldiff = clamp((diff*1.2) + c0, -0.0001, 1.0001) - c0;
 
 		// Calculate maximum saturation increase without altering ratios for RGB
 		float3 diff_luma = c0 - luma;
 
-		float poslim = (1.001 - luma)/max3(max(diff_luma, 0));
-		float neglim = (luma + 0.001)/max3(abs(min(diff_luma, 0)));
+		float poslim = (1.0001 - luma)/max3(max(diff_luma, 0));
+		float neglim = (luma + 0.0001)/max3(abs(min(diff_luma, 0)));
 
 		float diffmul = min(min(abs(poslim), abs(neglim)), 32);
 
