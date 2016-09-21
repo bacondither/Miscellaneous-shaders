@@ -43,9 +43,9 @@ float2 p1  : register(c1);
 #define soft_lim(v,s)  ( clamp((v/s)*(27 + pow(v/s, 2))/(27 + 9*pow(v/s, 2)), -1, 1)*s )
 
 // Weighted power mean, p=0.5
-#define wpmean(a,b,c)  ( pow((c*sqrt(abs(a)) + (1-c)*sqrt(abs(b))), 2) )
+#define wpmean(a,b,w)  ( pow((w*sqrt(abs(a)) + (1-w)*sqrt(abs(b))), 2) )
 
-// Min rgb components
+// Max RGB components
 #define max3(RGB)      ( max((RGB).r, max((RGB).g, (RGB).b)) )
 
 // sRGB gamma approximation
@@ -58,7 +58,7 @@ float2 p1  : register(c1);
 float4 main(float2 tex : TEXCOORD0) : COLOR
 {
 	float3 c0  = saturate(tex2D(s0, tex).rgb);
-	float luma = to_gamma(max(dot(to_linear(c0), lumacoeff), 0));
+	float luma = to_gamma( max(dot(to_linear(c0), lumacoeff), 0) );
 
 	float3 colour = luma + (c0 - luma)*(max(colourfulness, -1) + 1);
 
@@ -69,7 +69,7 @@ float4 main(float2 tex : TEXCOORD0) : COLOR
 		// 120% of colour clamped to max range + overshoot
 		float3 ccldiff = clamp((diff*1.2) + c0, -0.0001, 1.0001) - c0;
 
-		// Calculate maximum saturation increase without altering ratios for RGB
+		// Calculate maximum saturation-increase without altering ratios for RGB
 		float3 diff_luma = c0 - luma;
 
 		float poslim = (1.0001 - luma)/max3(max(diff_luma, 0));
