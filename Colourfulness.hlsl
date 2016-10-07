@@ -40,7 +40,7 @@ float2 p1  : register(c1);
 //-------------------------------------------------------------------------------------------
 
 // Soft limit, modified tanh approximation
-#define soft_lim(v,s)  ( clamp((v/s)*(27 + pow(v/s, 2))/(27 + 9*pow(v/s, 2)), -1, 1)*s )
+#define soft_lim(v,s)  ( clamp((v/s)*(27 + (v/s)*(v/s))/(27 + 9*(v/s)*(v/s)), -1, 1)*s )
 
 // Weighted power mean, p=0.5
 #define wpmean(a,b,w)  ( pow((w*sqrt(abs(a)) + (1-w)*sqrt(abs(b))), 2) )
