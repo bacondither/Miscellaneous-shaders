@@ -1,6 +1,6 @@
 // $MinimumShaderProfile: ps_2_b
 
-// Copyright (c) 2016, bacondither
+// Copyright (c) 2016-2017, bacondither
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -24,7 +24,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 // THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Colourfulness - version 2016-10-09 - (requires ps >= ps_2_b)
+// Colourfulness - version 2017-03-22 - (requires ps >= ps_2_b)
 // EXPECTS FULL RANGE GAMMA LIGHT
 
 sampler s0 : register(s0);
@@ -37,51 +37,53 @@ float2 p1  : register(c1);
 
 #define alpha_out      1.0          // MPDN requires alpha channel output to be 1.0
 
+#define fast_luma      0            // Rapid approx of sRGB gamma, small difference in quality
+
 //-------------------------------------------------------------------------------------------
 
 // Soft limit, modified tanh approximation
 #define soft_lim(v,s)  ( clamp((v/s)*(27 + (v/s)*(v/s))/(27 + 9*(v/s)*(v/s)), -1, 1)*s )
 
 // Weighted power mean, p=0.5
-#define wpmean(a,b,w)  ( pow((w*sqrt(abs(a)) + (1-w)*sqrt(abs(b))), 2) )
+#define wpmean(a,b,w)  ( pow((w*sqrt(abs(a)) + abs(1-w)*sqrt(abs(b))), 2) )
 
 // Max RGB components
 #define max3(RGB)      ( max((RGB).r, max((RGB).g, (RGB).b)) )
-
-// sRGB gamma approximation
-#define to_linear(G)   ( pow((G) + 0.06, 2.4) )
-#define to_gamma(LL)   ( pow((LL), 1.0/2.4) - 0.06 )
 
 // Mean of Rec. 709 & 601 luma coefficients
 #define lumacoeff        float3(0.2558, 0.6511, 0.0931)
 
 float4 main(float2 tex : TEXCOORD0) : COLOR
 {
-	float3 c0  = saturate(tex2D(s0, tex).rgb);
-	float luma = to_gamma( max(dot(to_linear(c0), lumacoeff), 0) );
+	#if (fast_luma == 1)
+		float3 c0  = tex2D(s0, tex).rgb;
+		float luma = sqrt(dot(saturate(c0*abs(c0)), lumacoeff));
+		c0 = saturate(c0);
+	#else // Better approx of sRGB gamma
+		float3 c0  = saturate(tex2D(s0, tex).rgb);
+		float luma = pow(dot(pow(c0 + 0.06, 2.4), lumacoeff), 1.0/2.4) - 0.06;
+	#endif
 
-	float3 colour = luma + (c0 - luma)*(max(colourfulness, -1) + 1);
+	float3 colour = luma + (c0 - luma)*(colourfulness + 1);
 
-	float3 diff = colour - c0;
+	float3 c_diff = colour - c0;
 
 	if (colourfulness > 0.0)
 	{
 		// 120% of colour clamped to max range + overshoot
-		float3 ccldiff = clamp((diff*1.2) + c0, -0.0001, 1.0001) - c0;
+		float3 ccldiff = clamp((c_diff*1.2) + c0, -0.0001, 1.0001) - c0;
 
 		// Calculate maximum saturation-increase without altering ratios for RGB
 		float3 diff_luma = c0 - luma;
 
-		float poslim = (1.0001 - luma)/max3(max(diff_luma, 1e-6));
-		float neglim = (luma + 0.0001)/max3(abs(min(diff_luma, -1e-6)));
+		float poslim = (1.0002 - luma)/(max3(max(diff_luma, 0)) + 0.0001);
+		float neglim = (luma + 0.0002)/(max3(abs(min(diff_luma, 0))) + 0.0001);
 
-		float diffmul = min(min(poslim, neglim), 32);
-
-		float3 diffmax = max( abs((luma + diff_luma*diffmul) - c0), 1e-6 );
+		float3 diffmax = (luma + diff_luma*min(min(poslim, neglim), 32)) - c0;
 
 		// Soft limit diff
-		diff = soft_lim( diff, wpmean(diffmax, ccldiff, lim_luma) );
+		c_diff = soft_lim( c_diff, max( wpmean(diffmax, ccldiff, lim_luma), 1e-6 ) );
 	}
 
-	return float4( c0 + diff, alpha_out );
+	return float4(c0 + c_diff, alpha_out);
 }
