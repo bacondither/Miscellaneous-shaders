@@ -24,7 +24,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 // THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Colourfulness - version 2017-04-21 - (requires ps >= ps_2_b)
+// Colourfulness - version 2017-05-01 - (requires ps >= ps_2_b)
 // EXPECTS FULL RANGE GAMMA LIGHT
 
 sampler s0 : register(s0);
@@ -41,11 +41,11 @@ float2 p1  : register(c1);
 
 //-------------------------------------------------------------------------------------------
 
-// Soft limit, modified tanh approximation
-#define soft_lim(v,s)  ( clamp((v/s)*(27 + (v/s)*(v/s))/(27 + 9*(v/s)*(v/s)), -1, 1)*s )
+// Sigmoid function, sign(v)*pow(pow(abs(v), -2) + pow(s, -2), 1.0/-2)
+#define soft_lim(v,s)  ( (v*s)*rcp(sqrt(s*s + v*v)) )
 
-// Weighted power mean, p=0.5
-#define wpmean(a,b,w)  ( pow((w*sqrt(abs(a)) + abs(1-w)*sqrt(abs(b))), 2) )
+// Weighted power mean, p = 0.5
+#define wpmean(a,b,w)  ( pow(w*sqrt(abs(a)) + abs(1-w)*sqrt(abs(b)), 2) )
 
 // Max/Min RGB components
 #define max3(RGB)      ( max((RGB).r, max((RGB).g, (RGB).b)) )
@@ -81,7 +81,7 @@ float4 main(float2 tex : TEXCOORD0) : COLOR
 		float3 diffmax = diff_luma*min(min(poslim, neglim), 32) - diff_luma;
 
 		// Soft limit diff
-		c_diff = soft_lim( c_diff, max( wpmean(diffmax, rlc_diff, lim_luma), 1e-6 ) );
+		c_diff = soft_lim( c_diff, max(wpmean(diffmax, rlc_diff, lim_luma), 1e-6) );
 	}
 
 	return float4(c0 + c_diff, alpha_out);
