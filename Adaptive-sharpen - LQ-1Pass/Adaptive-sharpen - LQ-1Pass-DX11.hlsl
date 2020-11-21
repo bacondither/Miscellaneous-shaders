@@ -57,9 +57,6 @@
 #define scale_lim       0.1                  // Abs max change before compression [>0.01]
 #define scale_cs        0.056                // Compression slope above scale_lim
 
-#define dW_lothr        0.3                  // Start interpolating between W1 and W2
-#define dW_hithr        0.8                  // When dW is equal to W2
-
 #define lowthr_mxw      0.1                  // Edge value for max lowthr weight [>0.01]
 
 #define pm_p            0.7                  // Power mean p-value [>0-1.0]
@@ -104,7 +101,7 @@ cbuffer PS_CONSTANTS : register(b0)
 
 // Get destination pixel values
 #define get(x,y)       ( saturate(tex.Sample(samp, float2(px*x, py*y) + coord).rgb) )
-#define dxdy(val)      ( LENGTH(abs(ddx(val)) + abs(ddy(val))) ) // edgemul 2.2
+#define dxdy(val)      ( LENGTH(abs(ddx(val)) + abs(ddy(val))) ) // edgemul = 2.2
 
 // Colour to luma, fast approx gamma, avg of rec. 709 & 601 luma coeffs
 #define CtL(RGB)       ( sqrt(dot(sqr(RGB), float3(0.2558, 0.6511, 0.0931))) )
