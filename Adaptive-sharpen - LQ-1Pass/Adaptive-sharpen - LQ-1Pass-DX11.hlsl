@@ -71,11 +71,7 @@ SamplerState samp : register(s0);
 
 cbuffer PS_CONSTANTS : register(b0)
 {
-	float  px;
-	float  py;
-	float2 wh;
-	uint   counter;
-	float  clock;
+	float2 pxy;
 };
 
 // Helper funcs
@@ -100,7 +96,7 @@ cbuffer PS_CONSTANTS : register(b0)
 #define b_diff(pix)    ( abs(blur - c[pix]) )
 
 // Get destination pixel values
-#define get(x,y)       ( saturate(tex.Sample(samp, float2(px*x, py*y) + coord).rgb) )
+#define get(x,y)       ( saturate(tex.Sample(samp, pxy*float2(x, y) + coord).rgb) )
 #define dxdy(val)      ( LENGTH(abs(ddx(val)) + abs(ddy(val))) ) // edgemul = 2.2
 
 // Colour to luma, fast approx gamma, avg of rec. 709 & 601 luma coeffs
