@@ -40,7 +40,7 @@
 //-------------------------------------------------------------------------------------------------
 #define fast_length     1                    // Fast length using aproximate sqrt
 //-------------------------------------------------------------------------------------------------
-#define fskip           1                    // Skip limiting on flat areas where sharpdiff is low
+#define fskip           0                    // Skip limiting on flat areas where sharpdiff is low
 
 //=================================================================================================
 // Defined values under this row are "optimal" DO NOT CHANGE IF YOU DO NOT KNOW WHAT YOU ARE DOING!
