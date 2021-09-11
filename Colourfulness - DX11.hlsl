@@ -1,4 +1,4 @@
-// $MinimumShaderProfile: ps_2_b
+// $MinimumShaderProfile: ps_4_0
 
 // Copyright (c) 2016-2021, bacondither
 // All rights reserved.
@@ -24,10 +24,8 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 // THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Colourfulness - version 2021-09-01 - (requires ps >= ps_2_b)
+// Colourfulness - version DX11 - 2021-09-01 - (requires ps >= 4.0)
 // EXPECTS FULL RANGE GAMMA LIGHT
-
-sampler s0 : register(s0);
 
 //================================= Settings ======================================================
 
@@ -39,6 +37,9 @@ sampler s0 : register(s0);
 #define fast_luma      0            // Rapid approx of sRGB gamma, small difference in quality
 
 //=================================================================================================
+
+Texture2D tex     : register(t0);
+SamplerState samp : register(s0);
 
 // Sigmoid function, sign(v)*pow(pow(abs(v), -2) + pow(s, -2), 1.0/-2)
 #define soft_lim(v,s)  ( (v*s)*rcp(sqrt(s*s + v*v)) )
@@ -53,14 +54,15 @@ sampler s0 : register(s0);
 // Mean of Rec. 709 & 601 luma coefficients
 #define lumacoeff        float3(0.2558, 0.6511, 0.0931)
 
-float4 main(float2 tex : TEXCOORD0) : COLOR
+
+float4 main(float4 pos : SV_POSITION, float2 coord : TEXCOORD) : SV_Target
 {
 	#if (fast_luma == 1)
-		float3 c0  = tex2D(s0, tex).rgb;
+		float3 c0  = tex.Sample(samp, coord).rgb;
 		float luma = sqrt(dot(saturate(c0*abs(c0)), lumacoeff));
 		c0 = saturate(c0);
 	#else // Better approx of sRGB gamma
-		float3 c0  = saturate(tex2D(s0, tex).rgb);
+		float3 c0  = saturate(tex.Sample(samp, coord).rgb);
 		float luma = saturate(pow(dot(pow(c0 + 0.06, 2.4), lumacoeff), 1.0/2.4) - 0.06);
 	#endif
 
