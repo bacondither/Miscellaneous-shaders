@@ -1,4 +1,4 @@
-// $MinimumShaderProfile: ps_3_0
+// $MinimumShaderProfile: ps_4_0
 
 // Copyright (c) 2021, bacondither
 // All rights reserved.
@@ -24,37 +24,48 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 // THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Interleaved Gradient Noise dither - version 2021-08-26 - (requires ps >= 3.0)
+// Interleaved Gradient Noise dither - version DX11 - 2021-08-26 - (requires ps >= 4.0)
 // EXPECTS FULL RANGE GAMMA LIGHT
 
-sampler s0 : register(s0);
-float4 p0  : register(c0);
-
-//--------------------------------- Settings ------------------------------------------------------
+//================================== Settings =====================================================
 
 #define backbuffer_bits    8.0          // Backbuffer bith depth, most likely 8 or 10 bits
 #define col_noise          1            // Coloured dither noise, lower subjective noise level
 #define temporal_dither    1            // Dither changes with every frame
+//-------------------------------------------------------------------------------------------------
 #define quant_to_bit_depth 0            // Quantize to target bitdepth
+//-------------------------------------------------------------------------------------------------
 #define alpha_out          1.0          // MPDN requires alpha channel output to be 1.0
 
-//-------------------------------------------------------------------------------------------------
+//=================================================================================================
+
+Texture2D tex     : register(t0);
+SamplerState samp : register(s0);
+
+cbuffer PS_CONSTANTS : register(b0)
+{
+	float2 pxy;
+	float  width;
+	float  height;
+	uint   counter;
+	float  clock;
+};
 
 #define qrand(x) frac(sin(x)*43758.5453123)
 
-float4 main(float4 pos : SV_Position, float2 tex : TEXCOORD0) : COLOR
+float4 main(float4 pos : SV_POSITION, float2 coord : TEXCOORD) : SV_Target
 {
-	float3 c0 = tex2D(s0, tex).rgb;
+	float3 c0 = tex.Sample(samp, coord).rgb;
 
 	float colsteps = exp2(backbuffer_bits) - 1;
 
 	// Interleaved gradient noise by Jorge Jimenez
 	const float3 magic = float3(0.06711056, 0.00583715, 52.9829189);
 	#if (temporal_dither == 1)
-		if ((abs(p0[2]) % 4) >= 2) pos.xy = float2(-pos.y, pos.x);
-		if ((abs(p0[2]) % 2) >= 1) pos.x = -pos.x;
+		if ((counter % 4) >= 2) pos.xy = float2(-pos.y, pos.x);
+		if ((counter % 2) >= 1) pos.x = -pos.x;
 
-		float xy_magic = dot(pos.xy + qrand(p0[2]), magic.xy);
+		float xy_magic = dot(pos.xy + qrand(counter), magic.xy);
 	#else
 		float xy_magic = pos.x*magic.x + pos.y*magic.y;
 	#endif
