@@ -1,6 +1,6 @@
 // $MinimumShaderProfile: ps_4_0
 
-// Copyright (c) 2015-2020, bacondither
+// Copyright (c) 2015-2021, bacondither
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -24,49 +24,48 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 // THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+// Adaptive sharpen - version LQ-1Pass-DX11 - 2021-09-10
 // Lower quality one pass version, similiar speed to the two pass version
-
-// Adaptive sharpen - version LQ-1Pass-DX11 - 2020-11-14
 // Tuned for use post-resize, EXPECTS FULL RANGE GAMMA LIGHT (requires ps >= 4.0)
 
-//--------------------------------------- Settings ------------------------------------------------
+//======================================= Settings ================================================
 
 #define curve_height    1.0                  // Main control of sharpening strength [>0]
                                              // 0.3 <-> 2.0 is a reasonable range of values
-
+//-------------------------------------------------------------------------------------------------
 #define video_level_out 0                    // 1 to preserve BTB & WTW (minor summation error)
                                              // Normally it should be set to 0
-
-#define hq_e0           1                    // HQ centre edge calc used in the two pass version
-
-#define fast_length     1                    // Fast length using aproximate sqrt
-
 //-------------------------------------------------------------------------------------------------
+#define hq_e0           1                    // HQ centre edge calc used in the two pass version
+//-------------------------------------------------------------------------------------------------
+#define fast_length     1                    // Fast length using aproximate sqrt
+//-------------------------------------------------------------------------------------------------
+#define fskip           1                    // Skip limiting on flat areas where sharpdiff is low
+
+//=================================================================================================
 // Defined values under this row are "optimal" DO NOT CHANGE IF YOU DO NOT KNOW WHAT YOU ARE DOING!
 
 #define curveslope      0.5                  // Sharpening curve slope, high edge values
-
+//-------------------------------------------------------------------------------------------------
 #define L_overshoot     0.003                // Max light overshoot before compression [>0.001]
 #define L_compr_low     0.167                // Light compression, default (0.167=~6x)
 #define L_compr_high    0.334                // Light compression, surrounded by edges (0.334=~3x)
-
+//-------------------------------------------------------------------------------------------------
 #define D_overshoot     0.009                // Max dark overshoot before compression [>0.001]
 #define D_compr_low     0.250                // Dark compression, default (0.250=4x)
 #define D_compr_high    0.500                // Dark compression, surrounded by edges (0.500=2x)
-
+//-------------------------------------------------------------------------------------------------
 #define scale_lim       0.1                  // Abs max change before compression [>0.01]
-#define scale_cs        0.056                // Compression slope above scale_lim
-
-#define lowthr_mxw      0.1                  // Edge value for max lowthr weight [>0.01]
-
-#define pm_p            0.7                  // Power mean p-value [>0-1.0]
-
+#define scale_cs        0.056                // Compression slope above scale_lim [0.0-1.0]
+//-------------------------------------------------------------------------------------------------
+#define pm_p            0.7                  // Power mean p-value [>0.0-1.0]
+//-------------------------------------------------------------------------------------------------
 #define alpha_out       1.0                  // MPDN requires the alpha channel output to be 1.0
                                              // Can be set to 0.0 for MPC-HC
 
-//-------------------------------------------------------------------------------------------------
+//=================================================================================================
 
-Texture2D tex : register(t0);
+Texture2D tex     : register(t0);
 SamplerState samp : register(s0);
 
 cbuffer PS_CONSTANTS : register(b0) { float2 pxy; };
@@ -79,6 +78,12 @@ cbuffer PS_CONSTANTS : register(b0) { float2 pxy; };
 #else
 	#define LENGTH(v)      ( length(v) )
 #endif
+
+// Fast-skip threshold, keep max possible luma error under 0.5/2^bit-depth
+// Approx of x = tanh(x/y)*y + 0.5/2^bit-depth, y = min(L_overshoot, D_overshoot)
+#define min_overshoot  ( min(abs(L_overshoot), abs(D_overshoot)) )
+//#define fskip_th       ( 0.114*pow(min_overshoot, 0.676) + 3.20e-4 ) // 10-bits
+#define fskip_th       ( 0.045*pow(min_overshoot, 0.667) + 1.75e-5 ) // 14-bits
 
 // Soft if, fast linear approx
 #define soft_if(a,b,c) ( saturate((a + b + c + 0.025455)/(maxedge + 0.013636) - 0.85) )
@@ -144,6 +149,8 @@ float4 main(float4 pos : SV_POSITION, float2 coord : TEXCOORD) : SV_Target
 		            + 0.23*(b_diff(9) + b_diff(10) + b_diff(11) + b_diff(12));
 
 		float cedge = LENGTH(edge)*c_comp;
+	#else
+		float cedge = e[0]*2.2;
 	#endif
 
 	// Allow for higher overshoot if the current edge pixel is surrounded by similar edge pixels
@@ -178,12 +185,7 @@ float4 main(float4 pos : SV_POSITION, float2 coord : TEXCOORD) : SV_Target
 	const float3 W2 = float3(0.86602540378, 1.0, 0.54772255751); // 0.75, 1.0, 0.3
 
 	// Transition to a concave kernel if the center edge val is above thr
-	#if (hq_e0 == 0)
-		float dW_edge = 5.28*e[0];
-	#else
-		float dW_edge = 2.4*cedge;
-	#endif
-	float3 dW = sqr(lerp( W1, W2, saturate(dW_edge - 0.82) ));
+	float3 dW = sqr(lerp( W1, W2, saturate(2.4*cedge - 0.82) ));
 
 	// Use lower weights for pixels in a more active area relative to center pixel area
 	// This results in narrower and less visible overshoots around sharp edges
@@ -214,7 +216,7 @@ float4 main(float4 pos : SV_POSITION, float2 coord : TEXCOORD) : SV_Target
 
 	[unroll] for (int pix = 0; pix < 12; ++pix)
 	{
-		float lowthr = clamp((29.04*e[pix + 1] - 0.221), 0.01, 1);
+		float lowthr = clamp((29.04*e[pix + 1] - 0.221), 0.01, 1); // lowthr_mxw = 0.1
 
 		neg_laplace += sqr(luma[pix + 1])*(abs(weights[pix])*lowthr);
 		weightsum   += abs(weights[pix])*lowthr;
@@ -224,51 +226,53 @@ float4 main(float4 pos : SV_POSITION, float2 coord : TEXCOORD) : SV_Target
 	neg_laplace = sqrt(neg_laplace/weightsum);
 
 	// Compute sharpening magnitude function
-	#if (hq_e0 == 0)
-		float cedge = e[0]*2.2;
-	#endif
 	float sharpen_val = curve_height/(curve_height*curveslope*pow(abs(cedge), 3.5) + 0.625);
 
 	// Calculate sharpening diff and scale
 	float sharpdiff = (c0_Y - neg_laplace)*(lowthrsum*sharpen_val + 0.01);
 
-	// Calculate local near min & max, partial sort
-	[unroll] for (int i = 0; i < 2; ++i)
+#if (fskip == 1)
+	if (abs(sharpdiff) > fskip_th)
 	{
-		float temp;
-
-		for (int j = i; j < 24-i; j += 2)
+#endif
+		// Calculate local near min & max, partial sort
+		[unroll] for (int i = 0; i < 2; ++i)
 		{
-			temp = luma[j];
-			luma[j]   = min(luma[j], luma[j+1]);
-			luma[j+1] = max(temp, luma[j+1]);
+			float temp;
+
+			[unroll] for (int j = i; j < 24-i; j += 2)
+			{
+				temp = luma[j];
+				luma[j]   = min(luma[j], luma[j+1]);
+				luma[j+1] = max(temp, luma[j+1]);
+			}
+
+			[unroll] for (int jj = 24-i; jj > i; jj -= 2)
+			{
+				temp = luma[i];
+				luma[i]    = min(luma[i], luma[jj]);
+				luma[jj]   = max(temp, luma[jj]);
+
+				temp = luma[24-i];
+				luma[24-i] = max(luma[24-i], luma[jj-1]);
+				luma[jj-1] = min(temp, luma[jj-1]);
+			}
 		}
 
-		for (int jj = 24-i; jj > i; jj -= 2)
-		{
-			temp = luma[i];
-			luma[i]    = min(luma[i], luma[jj]);
-			luma[jj]   = max(temp, luma[jj]);
+		float nmax = (max(luma[23], c0_Y)*2 + luma[24])/3;
+		float nmin = (min(luma[1],  c0_Y)*2 + luma[0])/3;
 
-			temp = luma[24-i];
-			luma[24-i] = max(luma[24-i], luma[jj-1]);
-			luma[jj-1] = min(temp, luma[jj-1]);
-		}
+		float min_dist  = min(abs(nmax - c0_Y), abs(c0_Y - nmin));
+		float2 pn_scale = float2(L_overshoot, D_overshoot) + min_dist;
+
+		pn_scale = min(pn_scale, scale_lim*(1 - scale_cs) + pn_scale*scale_cs);
+
+		// Soft limited anti-ringing with tanh, wpmean to control compression slope
+		sharpdiff = wpmean( max(sharpdiff, 0), soft_lim( max(sharpdiff, 0), pn_scale.x ), cs.x )
+		          - wpmean( min(sharpdiff, 0), soft_lim( min(sharpdiff, 0), pn_scale.y ), cs.y );
+#if (fskip == 1)
 	}
-
-	float nmax = (max(luma[23], c0_Y)*2 + luma[24])/3;
-	float nmin = (min(luma[1],  c0_Y)*2 + luma[0])/3;
-
-	float min_dist  = min(abs(nmax - c0_Y), abs(c0_Y - nmin));
-	float pos_scale = min_dist + L_overshoot;
-	float neg_scale = min_dist + D_overshoot;
-
-	pos_scale = min(pos_scale, scale_lim*(1 - scale_cs) + pos_scale*scale_cs);
-	neg_scale = min(neg_scale, scale_lim*(1 - scale_cs) + neg_scale*scale_cs);
-
-	// Soft limited anti-ringing with tanh, wpmean to control compression slope
-	sharpdiff = wpmean( max(sharpdiff, 0), soft_lim( max(sharpdiff, 0), pos_scale ), cs.x )
-	          - wpmean( min(sharpdiff, 0), soft_lim( min(sharpdiff, 0), neg_scale ), cs.y );
+#endif
 
 	// Compensate for saturation loss/gain while making pixels brighter/darker
 	float sharpdiff_lim = saturate(c0_Y + sharpdiff) - c0_Y;
