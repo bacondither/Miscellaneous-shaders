@@ -232,7 +232,7 @@ float4 main(float4 pos : SV_POSITION, float2 coord : TEXCOORD) : SV_Target
 	float sharpdiff = (c0_Y - neg_laplace)*(lowthrsum*sharpen_val + 0.01);
 
 #if (fskip == 1)
-	if (abs(sharpdiff) > fskip_th)
+	[branch] if (abs(sharpdiff) > fskip_th)
 	{
 #endif
 		// Calculate local near min & max, partial sort
