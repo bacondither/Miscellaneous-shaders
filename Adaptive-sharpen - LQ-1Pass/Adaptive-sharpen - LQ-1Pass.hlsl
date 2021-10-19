@@ -24,7 +24,7 @@
 // (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 // THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
-// Adaptive sharpen - version LQ-1Pass - 2021-09-10
+// Adaptive sharpen - version LQ-1Pass - 2021-10-17
 // Lower quality one pass version, similiar speed to the two pass version
 // Tuned for use post-resize, EXPECTS FULL RANGE GAMMA LIGHT (requires ps >= 3.0)
 
@@ -67,9 +67,10 @@ float2 p1  : register(c1);
 // Helper funcs
 #define sqr(a)         ( (a)*(a) )
 #define max4(a,b,c,d)  ( max(max(a, b), max(c, d)) )
+#define max3(a,b,c)    ( max(max(a, b), c) )
 
 // Soft if, fast linear approx
-#define soft_if(a,b,c) ( saturate((a + b + c + 0.025455)/(maxedge + 0.013636) - 0.85) )
+#define soft_if(a,b,c) ( saturate((a + b + c + 0.056/2.3)/(maxedge + 0.03/2.3) - 0.85) )
 
 // Soft limit, modified tanh approx
 #define soft_lim(v,s)  ( saturate(abs(v/s)*(27 + sqr(v/s))/(27 + 9*sqr(v/s)))*s )
@@ -82,7 +83,7 @@ float2 p1  : register(c1);
 
 // Get destination pixel values
 #define get(x,y)       ( saturate(tex2D(s0, p1*float2(x, y) + tex).rgb) )
-#define dxdy(val)      ( length(abs(ddx(val)) + abs(ddy(val))) ) // edgemul = 2.2
+#define dxdy(val)      ( length(abs(ddx(val)) + abs(ddy(val))) ) // =~1/2.3 hq edge without c_comp
 
 // Colour to luma, fast approx gamma, avg of rec. 709 & 601 luma coeffs
 #define CtL(RGB)       ( sqrt(dot(sqr(RGB), float3(0.2558, 0.6511, 0.0931))) )
@@ -112,13 +113,13 @@ float4 main(float2 tex : TEXCOORD0) : COLOR
 	                dxdy(c[15]), dxdy(c[16]), dxdy(c[17]), dxdy(c[18]), dxdy(c[19]),
 	                dxdy(c[20]), dxdy(c[21]), dxdy(c[22]), dxdy(c[23]), dxdy(c[24]) };
 
+	// Gauss blur 3x3
+	float3 blur = (2*(c[2]+c[4]+c[5]+c[7]) + (c[1]+c[3]+c[6]+c[8]) + 4*c[0])/16;
+
+	// Contrast compression, center = 0.5, scaled to 1/3
+	float c_comp = saturate(4.0/15.0 + 0.9*exp2(dot(blur, -37.0/15.0)));
+
 	#if (hq_e0 == 1)
-		// Gauss blur 3x3
-		float3 blur = (2*(c[2]+c[4]+c[5]+c[7]) + (c[1]+c[3]+c[6]+c[8]) + 4*c[0])/16;
-
-		// Contrast compression, center = 0.5, scaled to 1/3
-		float c_comp = saturate(4.0/15.0 + 0.9*exp2(dot(blur, -37.0/15.0)));
-
 		// Edge detection
 		// Relative matrix weights
 		// [          1          ]
@@ -133,7 +134,7 @@ float4 main(float2 tex : TEXCOORD0) : COLOR
 
 		float cedge = length(edge)*c_comp;
 	#else
-		float cedge = e[0]*2.2;
+		float cedge = e[0]*4.5*c_comp;
 	#endif
 
 	// Allow for higher overshoot if the current edge pixel is surrounded by similar edge pixels
@@ -172,7 +173,7 @@ float4 main(float2 tex : TEXCOORD0) : COLOR
 
 	// Use lower weights for pixels in a more active area relative to center pixel area
 	// This results in narrower and less visible overshoots around sharp edges
-	float modif_e0 = 3*e[0] + 0.0090909;
+	float modif_e0 = 3*e[0] + 0.02/2.3;
 
 	float weights[12] = { ( min(modif_e0/e[1],  dW.y) ),   // c1
 	                      ( dW.x ),                        // c2
@@ -187,10 +188,10 @@ float4 main(float2 tex : TEXCOORD0) : COLOR
 	                      ( min(modif_e0/e[11], dW.z) ),   // c11
 	                      ( min(modif_e0/e[12], dW.z) ) }; // c12
 
-	weights[0] = (max(max((weights[8]  + weights[9])/4,  weights[0]), 0.25) + weights[0])/2;
-	weights[2] = (max(max((weights[8]  + weights[10])/4, weights[2]), 0.25) + weights[2])/2;
-	weights[5] = (max(max((weights[9]  + weights[11])/4, weights[5]), 0.25) + weights[5])/2;
-	weights[7] = (max(max((weights[10] + weights[11])/4, weights[7]), 0.25) + weights[7])/2;
+	weights[0] = (max3((weights[8]  + weights[9])/4,  weights[0], 0.25) + weights[0])/2;
+	weights[2] = (max3((weights[8]  + weights[10])/4, weights[2], 0.25) + weights[2])/2;
+	weights[5] = (max3((weights[9]  + weights[11])/4, weights[5], 0.25) + weights[5])/2;
+	weights[7] = (max3((weights[10] + weights[11])/4, weights[7], 0.25) + weights[7])/2;
 
 	// Calculate the negative part of the laplace kernel and the low threshold weight
 	float lowthrsum   = 0;
@@ -199,7 +200,7 @@ float4 main(float2 tex : TEXCOORD0) : COLOR
 
 	[unroll] for (int pix = 0; pix < 12; ++pix)
 	{
-		float lowthr = clamp((29.04*e[pix + 1] - 0.221), 0.01, 1); // lowthr_mxw = 0.1
+		float lowthr = clamp((13.2*2.3*e[pix + 1] - 0.221), 0.01, 1); // lowthr_mxw = 0.1
 
 		neg_laplace += sqr(luma[pix + 1])*(abs(weights[pix])*lowthr);
 		weightsum   += abs(weights[pix])*lowthr;
