@@ -87,7 +87,7 @@ cbuffer PS_CONSTANTS : register(b0) { float2 pxy; };
 #define fskip_th       ( 0.045*pow(min_overshoot, 0.667) + 1.75e-5 ) // 14-bits
 
 // Soft if, fast linear approx
-#define soft_if(a,b,c) ( saturate((a + b + c + 0.056/2.3)/(maxedge + 0.03/2.3) - 0.85) )
+#define soft_if(a,b,c) ( saturate((a + b + c + 0.056/2.5)/(maxedge + 0.03/2.5) - 0.85) )
 
 // Soft limit, modified tanh approx
 #define soft_lim(v,s)  ( saturate(abs(v/s)*(27 + sqr(v/s))/(27 + 9*sqr(v/s)))*s )
@@ -100,7 +100,7 @@ cbuffer PS_CONSTANTS : register(b0) { float2 pxy; };
 
 // Get destination pixel values
 #define get(x,y)       ( saturate(tex.Sample(samp, pxy*float2(x, y) + coord).rgb) )
-#define dxdy(val)      ( LENGTH(abs(ddx(val)) + abs(ddy(val))) ) // =~1/2.3 hq edge without c_comp
+#define dxdy(val)      ( LENGTH(abs(ddx(val)) + abs(ddy(val))) ) // =~1/2.5 hq edge without c_comp
 
 // Colour to luma, fast approx gamma, avg of rec. 709 & 601 luma coeffs
 #define CtL(RGB)       ( sqrt(dot(sqr(RGB), float3(0.2558, 0.6511, 0.0931))) )
@@ -190,7 +190,7 @@ float4 main(float4 pos : SV_POSITION, float2 coord : TEXCOORD) : SV_Target
 
 	// Use lower weights for pixels in a more active area relative to center pixel area
 	// This results in narrower and less visible overshoots around sharp edges
-	float modif_e0 = 3*e[0] + 0.02/2.3;
+	float modif_e0 = 3*e[0] + 0.02/2.5;
 
 	float weights[12] = { ( min(modif_e0/e[1],  dW.y) ),   // c1
 	                      ( dW.x ),                        // c2
@@ -217,7 +217,7 @@ float4 main(float4 pos : SV_POSITION, float2 coord : TEXCOORD) : SV_Target
 
 	[unroll] for (int pix = 0; pix < 12; ++pix)
 	{
-		float lowthr = clamp((13.2*2.3*e[pix + 1] - 0.221), 0.01, 1); // lowthr_mxw = 0.1
+		float lowthr = clamp((13.2*4.5*c_comp*e[pix + 1] - 0.221), 0.01, 1); // lowthr_mxw = 0.1
 
 		neg_laplace += sqr(luma[pix + 1])*(abs(weights[pix])*lowthr);
 		weightsum   += abs(weights[pix])*lowthr;
