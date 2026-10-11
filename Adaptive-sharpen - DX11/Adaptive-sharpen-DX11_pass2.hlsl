@@ -107,6 +107,7 @@ cbuffer PS_CONSTANTS : register(b0) { float2 pxy; };
 #define get(x,y)       ( tex.Sample(samp, pxy*float2(x, y) + coord) )
 #define satc(var)      ( float4(saturate((var).rgb), (var).a) )
 
+// Helper funcs
 #define max4(a,b,c,d)  ( max(max(a, b), max(c, d)) )
 #define max3(a,b,c)    ( max(max(a, b), c) )
 #define sqr(a)         ( (a)*(a) )
@@ -219,7 +220,7 @@ float4 main(float4 pos : SV_POSITION, float2 coord : TEXCOORD) : SV_Target
 	[unroll] for (int pix = 0; pix < 12; ++pix)
 	{
 		#if (quality_mode == 0)
-			float lowthr = clamp((13.2*c[pix + 1].a - a_offset - 0.221), 0.01, 1);
+			float lowthr = clamp((13.2*(c[pix + 1].a - a_offset) - 0.221), 0.01, 1);
 
 			neg_laplace += sqr(luma[pix + 1])*(abs(weights[pix])*lowthr);
 		#else
