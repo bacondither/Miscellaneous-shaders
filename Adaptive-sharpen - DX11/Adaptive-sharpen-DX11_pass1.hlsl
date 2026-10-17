@@ -1,6 +1,6 @@
 // $MinimumShaderProfile: ps_4_0
 
-// Copyright (c) 2015-2021, bacondither
+// Copyright (c) 2015-2026, bacondither
 // All rights reserved.
 //
 // Redistribution and use in source and binary forms, with or without
@@ -26,7 +26,7 @@
 
 // First pass, MUST BE PLACED IMMEDIATELY BEFORE THE SECOND PASS IN THE CHAIN
 
-// Adaptive sharpen - version DX11 - 2021-09-10
+// Adaptive sharpen - version DX11 - 2026-10-11
 // Tuned for use post-resize, EXPECTS FULL RANGE GAMMA LIGHT (requires ps >= 4.0)
 
 //============================== Settings =============================================
